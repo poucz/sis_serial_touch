@@ -41,10 +41,10 @@ MODULE_LICENSE("GPL");
 #define SERIO_SIS_TOUCH	0x45
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-
+#define SIS_MAX_CONTACT		6
 #define SIS_PACKET_MAX_LENGTH	43
-#define SIS_TOUCH_DATA_OFFSET	5
-#define SIS_ID_DATA_OFFSET(id)	((6*id)+SIS_TOUCH_DATA_OFFSET)
+#define SIS_DATA_HEADER_OFFSET	5
+#define SIS_CONTACT_DATA_OFFSET(id)	((6*id)+SIS_DATA_HEADER_OFFSET)
 
 /*
  * Per-Orb data.
@@ -59,7 +59,7 @@ struct sis_touch {
 };
 
 
-struct sis_touch_data{
+struct sis_contact_data{
 	unsigned char status;
 	unsigned char id;
 	u16 x;
@@ -78,7 +78,7 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	unsigned char *data = sis_touch->data;
 	unsigned char c = 0;
 	int i;
-	struct sis_touch_data *touch_data;
+	struct sis_contact_data *touch_data;
 
 	if (sis_touch->idx < 2) return;
 	
@@ -92,14 +92,14 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	
 	printk("Touch cnt is : 0x%x\n",data[41]);
 	
-	for(i=0;i<6;i++){
-		touch_data=(struct sis_touch_data *)(data+SIS_ID_DATA_OFFSET(i));
+	for(i=0;i<SIS_MAX_CONTACT;i++){
+		touch_data=(struct sis_contact_data *)(data+SIS_CONTACT_DATA_OFFSET(i));
 		printk("Touch data1: status: 0x%x  id:%i coord: %i x %i \n",touch_data->status,touch_data->id,touch_data->x,touch_data->y);
 	}
 	
 	
-	for(i=0;i<6;i++){
-		touch_data=(struct sis_touch_data *)(data+SIS_ID_DATA_OFFSET(i));
+	for(i=0;i<SIS_MAX_CONTACT;i++){
+		touch_data=(struct sis_contact_data *)(data+SIS_CONTACT_DATA_OFFSET(i));
 		if(touch_data->id==0){
 			break;
 		}
@@ -117,49 +117,7 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	
 	input_sync(dev);
 	
-	return;
-/*
-
-	switch (data[0]) {
-
-		case 'R':				
-			sis_touch->data[sis_touch->idx - 1] = 0;
-			for (i = 1; i < sis_touch->idx && sis_touch->data[i] == ' '; i++);
-			printk(KERN_INFO "input: %s [%s] is %s\n",
-				 dev->name, sis_touch->data + i, sis_touch->phys);
-			break;
-
-		case 'D':				
-			if (sis_touch->idx != 12) return;
-			for (i = 0; i < 9; i++) sis_touch->data[i+2] ^= spaceorb_xor[i];
-			axes[0] = ( data[2]	 << 3) | (data[ 3] >> 4);
-			axes[1] = ((data[3] & 0x0f) << 6) | (data[ 4] >> 1);
-			axes[2] = ((data[4] & 0x01) << 9) | (data[ 5] << 2) | (data[4] >> 5);
-			axes[3] = ((data[6] & 0x1f) << 5) | (data[ 7] >> 2);
-			axes[4] = ((data[7] & 0x03) << 8) | (data[ 8] << 1) | (data[7] >> 6);
-			axes[5] = ((data[9] & 0x3f) << 4) | (data[10] >> 3);
-			for (i = 0; i < 6; i++)
-				input_report_abs(dev, spaceorb_axes[i], axes[i] - ((axes[i] & 0x200) ? 1024 : 0));
-			for (i = 0; i < 6; i++)
-				input_report_key(dev, spaceorb_buttons[i], (data[1] >> i) & 1);
-			break;
-
-		case 'K':				
-			if (sis_touch->idx != 5) return;
-			for (i = 0; i < 6; i++)
-				input_report_key(dev, spaceorb_buttons[i], (data[2] >> i) & 1);
-
-			break;
-
-		case 'E':				
-			if (sis_touch->idx != 4) return;
-			printk(KERN_ERR "spaceorb: Device error. [ ");
-			for (i = 0; i < 7; i++) if (data[1] & (1 << i)) printk("%s ", spaceorb_errors[i]);
-			printk("]\n");
-			break;
-	}*/
-
-	input_sync(dev);
+	
 }
 
 static irqreturn_t sis_ser_interrupt(struct serio *serio,
