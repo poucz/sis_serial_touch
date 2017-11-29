@@ -43,9 +43,8 @@ MODULE_LICENSE("GPL");
 
 
 #define SIS_PACKET_MAX_LENGTH	43
-
-static int spaceorb_buttons[] = { BTN_TL, BTN_TR, BTN_Y, BTN_X, BTN_B, BTN_A };
-static int spaceorb_axes[] = { ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ };
+#define SIS_TOUCH_DATA_OFFSET	5
+#define SIS_ID_DATA_OFFSET(id)	((6*id)+SIS_TOUCH_DATA_OFFSET)
 
 /*
  * Per-Orb data.
@@ -56,12 +55,17 @@ struct sis_touch {
 	int idx;
 	unsigned char data[SIS_PACKET_MAX_LENGTH];
 	char phys[32];
+	bool pendown;
 };
 
-static unsigned char spaceorb_xor[] = "SpaceWare";
 
-static unsigned char *spaceorb_errors[] = { "EEPROM storing 0 failed", "Receive queue overflow", "Transmit queue timeout",
-		"Bad packet", "Power brown-out", "EEPROM checksum error", "Hardware fault" };
+struct sis_touch_data{
+	unsigned char status;
+	unsigned char id;
+	u16 x;
+	u16 y;
+};
+
 
 /*
  * spaceorb_process_packet() decodes packets the driver receives from the
@@ -73,33 +77,59 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	struct input_dev *dev = sis_touch->dev;
 	unsigned char *data = sis_touch->data;
 	unsigned char c = 0;
-	int axes[6];
 	int i;
+	struct sis_touch_data *touch_data;
 
 	if (sis_touch->idx < 2) return;
 	
 	
-	/*
-	printk(KERN_INFO " data: %d",sis_touch->idx);
-	for (i = 0; i < sis_touch->idx; i++) printk(" 0x%x",data[i]);
-	printk("\n");
-	*/ 
-	
 	for (i = 0; i < sis_touch->idx; i++) c ^= data[i];//Check sum
+	//printk("Checksum : 0x%x\n",c);
+	//if (c) return;
 	
-	printk("Checksum : 0x%x\n",c);
-	if (c) return;
+	
+	//printk("Status is : 0x%x\n",data[SIS_TOUCH_DATA_OFFSET]);
+	
+	printk("Touch cnt is : 0x%x\n",data[41]);
+	
+	for(i=0;i<6;i++){
+		touch_data=(struct sis_touch_data *)(data+SIS_ID_DATA_OFFSET(i));
+		printk("Touch data1: status: 0x%x  id:%i coord: %i x %i \n",touch_data->status,touch_data->id,touch_data->x,touch_data->y);
+	}
+	
+	
+	for(i=0;i<6;i++){
+		touch_data=(struct sis_touch_data *)(data+SIS_ID_DATA_OFFSET(i));
+		if(touch_data->id==0){
+			break;
+		}
+	}
+	
+	
+	if(touch_data->status==0x02){
+		sis_touch->pendown=!sis_touch->pendown;
+		input_report_key(dev, BTN_TOUCH, sis_touch->pendown);
+		//printk("Pen is: 0x%x\n",sis_touch->pendown);
+	}
+	
+	input_report_abs(dev, ABS_X, touch_data->x);
+	input_report_abs(dev, ABS_Y, touch_data->y);
+	
+	input_sync(dev);
+	
+	return;
+/*
 
 	switch (data[0]) {
 
-		case 'R':				/* Reset packet */
+		case 'R':				
 			sis_touch->data[sis_touch->idx - 1] = 0;
 			for (i = 1; i < sis_touch->idx && sis_touch->data[i] == ' '; i++);
 			printk(KERN_INFO "input: %s [%s] is %s\n",
 				 dev->name, sis_touch->data + i, sis_touch->phys);
 			break;
 
-		case 'D':				/* Ball + button data */
+		case 'D':				
 			if (sis_touch->idx != 12) return;
 			for (i = 0; i < 9; i++) sis_touch->data[i+2] ^= spaceorb_xor[i];
 			axes[0] = ( data[2]	 << 3) | (data[ 3] >> 4);
@@ -114,20 +144,20 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 				input_report_key(dev, spaceorb_buttons[i], (data[1] >> i) & 1);
 			break;
 
-		case 'K':				/* Button data */
+		case 'K':				
 			if (sis_touch->idx != 5) return;
 			for (i = 0; i < 6; i++)
 				input_report_key(dev, spaceorb_buttons[i], (data[2] >> i) & 1);
 
 			break;
 
-		case 'E':				/* Error packet */
+		case 'E':				
 			if (sis_touch->idx != 4) return;
 			printk(KERN_ERR "spaceorb: Device error. [ ");
 			for (i = 0; i < 7; i++) if (data[1] & (1 << i)) printk("%s ", spaceorb_errors[i]);
 			printk("]\n");
 			break;
-	}
+	}*/
 
 	input_sync(dev);
 }
@@ -138,23 +168,28 @@ static irqreturn_t sis_ser_interrupt(struct serio *serio,
 	struct sis_touch* sis_touch = serio_get_drvdata(serio);
 
 
-	printk(KERN_INFO "Prislo data: 0x%x, clekem mam %d",data,sis_touch->idx);
+	//printk(KERN_INFO "Prislo : 0x%x, celkem mam %d",data,sis_touch->idx);
 
 	if(data!=0x02 && sis_touch->idx == 0){//cekam na hlavicku
 		printk(KERN_ERR "Data 0x%x is not coretct packet header.",data);
 		return IRQ_HANDLED;
 	}
 
-	if (data==0x02 && sis_touch->idx == SIS_PACKET_MAX_LENGTH) {//prisla hlavicka zpracuji paket ktery mam v buferru
-		MDEBUG("Hlavicka\n");
-		if (sis_touch->idx) sis_ser_process_packet(sis_touch);
-		sis_touch->idx = 0;
-	}
-	
+
+
 	if (sis_touch->idx < SIS_PACKET_MAX_LENGTH)
 		sis_touch->data[sis_touch->idx++] = data & 0x7f;
 	else
 		printk(KERN_ERR "Full packet buffer:%i, packet len:%i, discart: 0x%x",sis_touch->idx,SIS_PACKET_MAX_LENGTH,data);
+		
+		
+		
+	if (sis_touch->idx == SIS_PACKET_MAX_LENGTH) {//mam cely paket
+		//MDEBUG("Zpracovavam paket\n");
+		if (sis_touch->idx) sis_ser_process_packet(sis_touch);
+		sis_touch->idx = 0;
+	}
+	
 	return IRQ_HANDLED;
 }
 
@@ -183,7 +218,6 @@ static int sis_ser_connect(struct serio *serio, struct serio_driver *drv)
 	struct sis_touch *sis_touch;
 	struct input_dev *input_dev;
 	int err = -ENOMEM;
-	int i;
 
 
 MDEBUG ("Inzert pou driver");
@@ -205,13 +239,17 @@ MDEBUG ("Inzert pou driver");
 	input_dev->id.version = 0x0100;
 	input_dev->dev.parent = &serio->dev;
 
+	//input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
 	input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
+	
+	input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
+	input_dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
 
-	for (i = 0; i < 6; i++)
-		set_bit(spaceorb_buttons[i], input_dev->keybit);
+	input_set_capability(input_dev, EV_KEY, BTN_TOUCH);
+	input_set_abs_params(input_dev, ABS_X, 0, 32767, 0, 0);
+	input_set_abs_params(input_dev, ABS_Y, 0, 32767, 0, 0);
 
-	for (i = 0; i < 6; i++)
-		input_set_abs_params(input_dev, spaceorb_axes[i], -508, 508, 0, 0);
+
 
 	serio_set_drvdata(serio, sis_touch);
 
