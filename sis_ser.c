@@ -45,6 +45,8 @@ MODULE_LICENSE("GPL");
 #define SIS_PACKET_MAX_LENGTH	43
 #define SIS_DATA_HEADER_OFFSET	5
 #define SIS_CONTACT_DATA_OFFSET(id)	((6*id)+SIS_DATA_HEADER_OFFSET)
+#define SIS_CONTACT_COUNT_OFFSET	41
+
 
 /*
  * Per-Orb data.
@@ -52,7 +54,7 @@ MODULE_LICENSE("GPL");
 
 struct sis_touch {
 	struct input_dev *dev;
-	int idx;
+	int data_cnt;
 	unsigned char data[SIS_PACKET_MAX_LENGTH];
 	char phys[32];
 	bool pendown;
@@ -79,28 +81,33 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	unsigned char c = 0;
 	int i;
 	struct sis_contact_data *touch_data;
+	int contact_cnt;
 
-	if (sis_touch->idx < 2) return;
+	if (sis_touch->data_cnt < 2) return;
 	
 	
-	for (i = 0; i < sis_touch->idx; i++) c ^= data[i];//Check sum
+	for (i = 0; i < sis_touch->data_cnt; i++) c ^= data[i];//Check sum
 	//printk("Checksum : 0x%x\n",c);
 	//if (c) return;
 	
 	
 	//printk("Status is : 0x%x\n",data[SIS_TOUCH_DATA_OFFSET]);
 	
-	printk("Touch cnt is : 0x%x\n",data[41]);
+	contact_cnt=data[SIS_CONTACT_COUNT_OFFSET];
+	
+	/*
+	printk("Contact cnt is : 0x%x\n",contact_cnt);
 	
 	for(i=0;i<SIS_MAX_CONTACT;i++){
 		touch_data=(struct sis_contact_data *)(data+SIS_CONTACT_DATA_OFFSET(i));
 		printk("Touch data1: status: 0x%x  id:%i coord: %i x %i \n",touch_data->status,touch_data->id,touch_data->x,touch_data->y);
-	}
+	}*/
 	
 	
 	for(i=0;i<SIS_MAX_CONTACT;i++){
 		touch_data=(struct sis_contact_data *)(data+SIS_CONTACT_DATA_OFFSET(i));
 		if(touch_data->id==0){
+			printk("Touch data: status: 0x%x  id:%i coord: %i x %i \n",touch_data->status,touch_data->id,touch_data->x,touch_data->y);
 			break;
 		}
 	}
@@ -109,7 +116,7 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	if(touch_data->status==0x02){
 		sis_touch->pendown=!sis_touch->pendown;
 		input_report_key(dev, BTN_TOUCH, sis_touch->pendown);
-		//printk("Pen is: 0x%x\n",sis_touch->pendown);
+		printk("Pen is: 0x%x\n",sis_touch->pendown);
 	}
 	
 	input_report_abs(dev, ABS_X, touch_data->x);
@@ -126,26 +133,39 @@ static irqreturn_t sis_ser_interrupt(struct serio *serio,
 	struct sis_touch* sis_touch = serio_get_drvdata(serio);
 
 
-	//printk(KERN_INFO "Prislo : 0x%x, celkem mam %d",data,sis_touch->idx);
+	//printk(KERN_INFO "Prislo : 0x%x, celkem mam %d",data,sis_touch->data_cnt);
 
-	if(data!=0x02 && sis_touch->idx == 0){//cekam na hlavicku
+	if(data!=0x02 && sis_touch->data_cnt == 0){//cekam na hlavicku
 		printk(KERN_ERR "Data 0x%x is not coretct packet header.",data);
 		return IRQ_HANDLED;
 	}
 
+	if(data!=0x05 && sis_touch->data_cnt == 1){
+		printk(KERN_ERR "Data 0x%x is not coretct packet header2.",data);
+		sis_touch->data_cnt =0;
+		return IRQ_HANDLED;
+	}
 
 
-	if (sis_touch->idx < SIS_PACKET_MAX_LENGTH)
-		sis_touch->data[sis_touch->idx++] = data & 0x7f;
+	if (sis_touch->data_cnt < SIS_PACKET_MAX_LENGTH)
+		sis_touch->data[sis_touch->data_cnt++] = data & 0x7f;
 	else
-		printk(KERN_ERR "Full packet buffer:%i, packet len:%i, discart: 0x%x",sis_touch->idx,SIS_PACKET_MAX_LENGTH,data);
+		printk(KERN_ERR "Full packet buffer:%i, packet len:%i, discart: 0x%x",sis_touch->data_cnt,SIS_PACKET_MAX_LENGTH,data);
 		
 		
 		
-	if (sis_touch->idx == SIS_PACKET_MAX_LENGTH) {//mam cely paket
+	if (sis_touch->data_cnt == SIS_PACKET_MAX_LENGTH) {//mam cely paket
+		//kontrola spravnosti hlavicky:
+		if(sis_touch->data[0]!=0x02 || sis_touch->data[1]!=0x05){
+			printk(KERN_ERR "Not SIS header.. 0x%x  0x%x",sis_touch->data[0],sis_touch->data[1]);
+			sis_touch->data_cnt=0;
+			return IRQ_HANDLED;
+		}
+		
+		
 		//MDEBUG("Zpracovavam paket\n");
-		if (sis_touch->idx) sis_ser_process_packet(sis_touch);
-		sis_touch->idx = 0;
+		if (sis_touch->data_cnt) sis_ser_process_packet(sis_touch);
+		sis_touch->data_cnt = 0;
 	}
 	
 	return IRQ_HANDLED;
@@ -178,7 +198,7 @@ static int sis_ser_connect(struct serio *serio, struct serio_driver *drv)
 	int err = -ENOMEM;
 
 
-MDEBUG ("Inzert pou driver");
+MDEBUG ("Inzert pou driver 3");
 
 
 	sis_touch = kzalloc(sizeof(struct sis_touch), GFP_KERNEL);
