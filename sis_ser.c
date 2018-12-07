@@ -19,20 +19,25 @@
 #define MDEBUG(msg)  printk(KERN_ERR msg)
 
 
-
-
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/serio.h>
 
+
 #define DRIVER_DESC	"SiS touch controller driver over serial port"
+
+#define SIS_CONTROLER_TYPE_1 0
+#define SIS_I2C_CONTROLER_TYPE_2 1
+
 
 
 MODULE_AUTHOR("Jan Opravil <jan.opravil@jopr.cz>");
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL");
+
+
 
 /*
  * Constants.
@@ -46,6 +51,8 @@ MODULE_LICENSE("GPL");
 #define SIS_DATA_HEADER_OFFSET	5
 #define SIS_CONTACT_DATA_OFFSET(id)	((6*id)+SIS_DATA_HEADER_OFFSET)
 #define SIS_CONTACT_COUNT_OFFSET	41
+
+
 
 
 /*
@@ -67,6 +74,17 @@ struct sis_contact_data{
 	u16 x;
 	u16 y;
 };
+
+
+static short controler_type = SIS_CONTROLER_TYPE_1;
+static short ENABLE_DEBUG_MSG = 0;
+
+
+module_param(controler_type, short, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(controler_type, "Type of controler.0-stary protokol,1-novy protokol");
+module_param(ENABLE_DEBUG_MSG, short, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+MODULE_PARM_DESC(ENABLE_DEBUG_MSG, "Debug message printed to dmesg");
+
 
 
 /*
@@ -107,24 +125,33 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	for(i=0;i<SIS_MAX_CONTACT;i++){
 		touch_data=(struct sis_contact_data *)(data+SIS_CONTACT_DATA_OFFSET(i));
 		if(touch_data->id==0){
-			printk("Touch data: status: 0x%x  id:%i coord: %i x %i \n",touch_data->status,touch_data->id,touch_data->x,touch_data->y);
+			if(ENABLE_DEBUG_MSG)printk("Touch data: status: 0x%x  id:%i coord: %i x %i \n",touch_data->status,touch_data->id,touch_data->x,touch_data->y);
 			break;
 		}
 	}
 	
-	
-	if(touch_data->status==0x02){
-		sis_touch->pendown=!sis_touch->pendown;
-		input_report_key(dev, BTN_TOUCH, sis_touch->pendown);
-		printk("Pen is: 0x%x\n",sis_touch->pendown);
+	if(controler_type==SIS_I2C_CONTROLER_TYPE_2){
+		if(sis_touch->pendown==false && touch_data->status==0x03){
+			sis_touch->pendown=true;
+			input_report_key(dev, BTN_TOUCH, sis_touch->pendown);
+			if(ENABLE_DEBUG_MSG)printk("Pen is: 0x%x\n",sis_touch->pendown);
+		}else if(touch_data->status==0x00){
+			sis_touch->pendown=false;
+			input_report_key(dev, BTN_TOUCH, sis_touch->pendown);
+			if(ENABLE_DEBUG_MSG)printk("Pen is: 0x%x\n",sis_touch->pendown);
+		}
+	}else{//defaultne standardne:
+		if(touch_data->status==0x02){
+			sis_touch->pendown=!sis_touch->pendown;
+			input_report_key(dev, BTN_TOUCH, sis_touch->pendown);
+			if(ENABLE_DEBUG_MSG)printk("Pen is: 0x%x\n",sis_touch->pendown);
+		}
 	}
 	
 	input_report_abs(dev, ABS_X, touch_data->x);
 	input_report_abs(dev, ABS_Y, touch_data->y);
 	
 	input_sync(dev);
-	
-	
 }
 
 static irqreturn_t sis_ser_interrupt(struct serio *serio,
@@ -198,8 +225,8 @@ static int sis_ser_connect(struct serio *serio, struct serio_driver *drv)
 	int err = -ENOMEM;
 
 
-MDEBUG ("Inzert pou driver 3");
-
+MDEBUG ("Inzert pou driver 4");
+printk (KERN_ALERT "Using sis protocol:%i",controler_type);
 
 	sis_touch = kzalloc(sizeof(struct sis_touch), GFP_KERNEL);
 	input_dev = input_allocate_device();
