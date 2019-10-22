@@ -2,8 +2,8 @@ obj-m += sis_ser.o
 #obj-m += zk.o
 
 all:
-	#make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
-	make -C /media/data/kernel/linux-source-4.9 M=$(PWD) modules
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+	#make -C /media/data/kernel/linux-source-4.9 M=$(PWD) modules
 	#make -C /usr/src/linux-headers-4.9.0-0.bpo.4-amd64/ M=$(PWD) modules
 	
 	#make -C /home/pou/sis_serial_touch/linux-headers-4.9.0-0.bpo.4-amd64 M=$(PWD) modules

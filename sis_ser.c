@@ -104,11 +104,18 @@ static void sis_ser_process_packet(struct sis_touch *sis_touch)
 	if (sis_touch->data_cnt < 2) return;
 	
 	
-	for (i = 0; i < sis_touch->data_cnt; i++) c ^= data[i];//Check sum
-	//printk("Checksum : 0x%x\n",c);
-	//if (c) return;
+	for (i = 0; i < sis_touch->data_cnt-1; i++){
+		//unsigned char old_c=c;
+		c += data[i];//Check sum
+		//printk("Checksum(%d) :0x%x=0x%x^data:0x%x\n",i,c,old_c,data[i]);
+		//printk("Checksum\t%d\t%d\t%d\t%d\n",i,c,old_c,data[i]);
+	 }
 	
-	
+	if (c!=data[sis_touch->data_cnt-1]){
+		//printk("Checksum error :0x%x be:0x%x\n",c,data[sis_touch->data_cnt-1]);
+		//return;
+	}
+		
 	//printk("Status is : 0x%x\n",data[SIS_TOUCH_DATA_OFFSET]);
 	
 	contact_cnt=data[SIS_CONTACT_COUNT_OFFSET];
