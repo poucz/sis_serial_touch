@@ -92,6 +92,10 @@ MODULE_PARM_DESC(ENABLE_DEBUG_MSG, "Debug message printed to dmesg");
  * SpaceOrb.
  */
 
+//Documentation/input/multi-touch-protocol.txt
+//inspirace npar. drivers/input/touchscreen/egalax_ts.c
+//asi pozij spise input_mt_slot a ne egalax_ts.priklad
+
 static void sis_ser_process_packet(struct sis_touch *sis_touch)
 {
 	struct input_dev *dev = sis_touch->dev;
