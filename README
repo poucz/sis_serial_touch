@@ -1,0 +1,8 @@
+
+Pro spravnoufunkci je třeba:
+
+sudo insmod sis_ser.ko 
+sudo ./touch -sis /dev/ttyS0
+
+
+kde touch je program v "Bustec/program/inputattach/touch" - jedná se však o program inputattach
