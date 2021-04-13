@@ -13,6 +13,21 @@ controler_type=<0,1> --0 starej protokol, 1novej protokol nevim
 kde touch je program v "Bustec/program/inputattach/touch" - jedná se však o program inputattach
 
 
+KALIBRACE: 
+
 kalibrace provedene pomoci 
 
-xinputcalibratation
+export DISPLAY=:0.0
+sudo xinput_calibrator --geometry 800x480 
+
+Výstup z kalibrace:
+Section "InputClass"
+	Identifier	"calibration"
+	MatchProduct	"SiS touch screen"
+	Option	"Calibration"	"75 3898 -46 4141"
+	Option	"SwapAxes"	"0"
+EndSection
+
+
+zapsat do souboru:
+cat /usr/share/X11/xorg.conf.d/99-calibration.conf
