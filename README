@@ -1,8 +1,18 @@
 
 Pro spravnoufunkci je třeba:
 
-sudo insmod sis_ser.ko 
+sudo insmod sis_ser.ko <parametry>
+sudo insmod sis_ser.ko ENABLE_DEBUG_MSG=1 controler_type=1
 sudo ./touch -sis /dev/ttyS0
 
 
+parametry:
+ENABLE_DEBUG_MSG=<0,1>
+controler_type=<0,1> --0 starej protokol, 1novej protokol nevim 
+
 kde touch je program v "Bustec/program/inputattach/touch" - jedná se však o program inputattach
+
+
+kalibrace provedene pomoci 
+
+xinputcalibratation
